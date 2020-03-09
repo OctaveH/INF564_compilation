@@ -1,5 +1,3 @@
-(* TODO : vérifier unicité !!! *)
-
 open Ttree
 
 (* utiliser cette exception pour signaler une erreur de typage *)
@@ -222,11 +220,11 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
   | Ptree.Ecall (id, le) -> let fp = find_fun_in_ctx ctx id in    (* 2.2.12 *)
     let tle = List.map (type_expr ctx) le in
     let typ_list = List.map (function te -> te.expr_typ) tle in
-    (*if same_types typ_list fp.arg_ty then*)
+    if same_types typ_list fp.arg_ty then
       {expr_node=Ecall (id.id, tle); expr_typ=fp.fun_ty}
-        (*)  else
+    else
       raise (Error ("Cannot call \"" ^ id.id ^ "\" on these arguments (" ^
-                    (loc_to_string id.id_loc) ^ ")"))*)
+                    (loc_to_string id.id_loc) ^ ")"))
 
   | Ptree.Esizeof id -> let s = find_str_in_ctx ctx id in
     {expr_node=Esizeof s; expr_typ=Tint }
