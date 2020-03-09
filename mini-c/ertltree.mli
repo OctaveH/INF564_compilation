@@ -34,6 +34,16 @@ type cfg = instr Label.map
   (** Un graphe de flot de contrôle est un dictionnaire associant à des
       étiquettes des instructions ERTL. *)
 
+type live_info = {
+  instr: instr;
+  succ: Label.t list;    (* successeurs *)
+  mutable pred: Label.set;       (* prédécesseurs *)
+  defs: Register.set;    (* définitions *)
+  uses: Register.set;    (* utilisations *)
+  mutable  ins: Register.set;    (* variables vivantes en entrée *)
+  mutable outs: Register.set;    (* variables vivantes en sortie *)
+}
+
 (** Une fonction ERTL. *)
 type deffun = {
   fun_name : ident;
