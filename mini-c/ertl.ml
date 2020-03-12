@@ -179,6 +179,8 @@ Analyse de durée de vie
 
 let graph_info = ref Label.M.empty
 
+let ws = ref Label.S.empty
+
 let some_param n =
   let rec aux l k = match (l,k) with
     |([],k) -> []
@@ -236,11 +238,9 @@ let complete_live_info ()=
     add_to_pred info.succ label;
   in Label.M.iter aux !graph_info
 
-let kildall_fill_ws =
-  let ws = ref Label.S.empty in
+let kildall_fill_ws ()=
   let aux l i = ws := Label.S.add l !ws
-  in (Label.M.iter aux !graph;
-      ws)
+  in Label.M.iter aux !graph_info
 
 let rec kildall_fill_out succ = match succ with
   |[] -> Register.S.empty
@@ -249,9 +249,11 @@ let rec kildall_fill_out succ = match succ with
 
 
 let rec kildall () =
-  let ws = kildall_fill_ws in
+  kildall_fill_ws ();
+  if Label.S.is_empty !ws then assert(false) else
   while not (Label.S.is_empty !ws) do
     let l = Label.S.choose !ws in
+    ws := Label.S.remove l !ws;
     let t = Label.M.find l !graph_info in
     let old_ins = t.ins in
     t.outs <- kildall_fill_out t.succ;
@@ -265,7 +267,7 @@ let liveness cfg =
   graph_info := Label.M.empty;
   create_live_info cfg;
   complete_live_info();
-  kildall;
+  kildall ();
   !graph_info
 
 let rec liveness_file p = match p with
