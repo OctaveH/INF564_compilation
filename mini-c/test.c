@@ -7,5 +7,6 @@
 
 /*** listes circulaires doublement chaînées ***/
 
-int f(int x) {}
-int main() { f(); }
+int main() {
+  return 42;
+}
