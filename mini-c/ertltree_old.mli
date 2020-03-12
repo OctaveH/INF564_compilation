@@ -10,8 +10,6 @@ type register = Register.t
 
 type label = Label.t
 
-
-
 (** Les différentes instructions ERTL *)
 type instr =
   (** les mêmes que dans RTL *)
@@ -32,6 +30,10 @@ type instr =
   | Epush_param of register * label
   | Ereturn
 
+type cfg = instr Label.map
+  (** Un graphe de flot de contrôle est un dictionnaire associant à des
+      étiquettes des instructions ERTL. *)
+
 type live_info = {
   instr: instr;
   succ: Label.t list;    (* successeurs *)
@@ -41,10 +43,6 @@ type live_info = {
   mutable  ins: Register.set;    (* variables vivantes en entrée *)
   mutable outs: Register.set;    (* variables vivantes en sortie *)
 }
-
-type cfg = instr Label.map
-  (** Un graphe de flot de contrôle est un dictionnaire associant à des
-      étiquettes des instructions ERTL. *)
 
 (** Une fonction ERTL. *)
 type deffun = {
@@ -75,8 +73,8 @@ val visit: (label -> instr -> unit) -> cfg -> label -> unit
 
 val print_instr: Format.formatter -> instr -> unit
 
-val print_graph: Format.formatter -> live_info Label.M.t -> cfg -> label -> unit
+val print_graph: Format.formatter -> cfg -> label -> unit
 
-val print_deffun: Format.formatter -> (deffun * live_info Label.M.t) -> unit
+val print_deffun: Format.formatter -> deffun -> unit
 
-val print_file: Format.formatter -> (deffun * live_info Label.M.t) list -> unit
+val print_file: Format.formatter -> file -> unit

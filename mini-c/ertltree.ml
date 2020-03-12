@@ -10,6 +10,8 @@ type register = Register.t
 
 type label = Label.t
 
+
+
 (** Les différentes instructions ERTL *)
 type instr =
   (** les mêmes que dans RTL *)
@@ -30,10 +32,6 @@ type instr =
   | Epush_param of register * label
   | Ereturn
 
-type cfg = instr Label.map
-  (** Un graphe de flot de contrôle est un dictionnaire associant à des
-      étiquettes des instructions ERTL. *)
-
 type live_info = {
   instr: instr;
   succ: Label.t list;    (* successeurs *)
@@ -43,6 +41,10 @@ type live_info = {
   mutable  ins: Register.set;    (* variables vivantes en entrée *)
   mutable outs: Register.set;    (* variables vivantes en sortie *)
 }
+
+type cfg = instr Label.map
+  (** Un graphe de flot de contrôle est un dictionnaire associant à des
+      étiquettes des instructions ERTL. *)
 
 (** Une fonction ERTL. *)
 type deffun = {
@@ -170,17 +172,26 @@ let visit f g entry =
   in
   visit entry
 
-let print_graph fmt =
-  visit (fun l i -> fprintf fmt "%a: %a@\n" Label.print l print_instr i)
+let print_set = Register.print_set
 
-let print_deffun fmt f =
+
+let print_live_info fmt li =
+  fprintf fmt "d={%a}@ u={%a}@ i={%a}@ o={%a}"
+    print_set li.defs print_set li.uses print_set li.ins print_set li.outs
+
+let print_graph fmt li =
+  visit (fun l i -> fprintf fmt "%a: %a %a@\n" Label.print l print_instr i print_live_info (Label.M.find l li))
+
+
+let print_deffun fmt (f,li)  =
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
   fprintf fmt "  @[";
   fprintf fmt "entry : %a@\n" Label.print f.fun_entry;
   fprintf fmt "locals: @[%a@]@\n" Register.print_set f.fun_locals;
-  print_graph fmt f.fun_body f.fun_entry;
+  print_graph fmt li f.fun_body f.fun_entry;
   fprintf fmt "@]@."
+
 
 let print_file fmt p =
   fprintf fmt "=== ERTL =================================================@\n";
-  List.iter (print_deffun fmt) p.funs
+  List.iter (print_deffun fmt) p

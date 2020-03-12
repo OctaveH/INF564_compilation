@@ -1,3 +1,4 @@
+
 (* Fichier principal du compilateur mini-c *)
 
 open Format
@@ -9,6 +10,7 @@ let parse_only = ref false
 let type_only = ref false
 let interp_rtl = ref false
 let interp_ertl = ref false
+let interp_ltl = ref false
 let debug = ref false
 
 let ifile = ref ""
@@ -17,16 +19,18 @@ let set_file f s = f := s
 
 let options =
   ["--parse-only", Arg.Set parse_only,
-   "  stops after parsing";
+     "  stops after parsing";
    "--type-only", Arg.Set type_only,
-   "  stops after typing";
+     "  stops after typing";
    "--interp-rtl", Arg.Set interp_rtl,
-   "  interprets RTL (and does not compile)";
+     "  interprets RTL (and does not compile)";
    "--interp-ertl", Arg.Set interp_ertl,
-   "  interprets ERTL (and does not compile)";
+     "  interprets ERTL (and does not compile)";
+   "--interp-ltl", Arg.Set interp_ltl,
+     "  interprets LTL (and does not compile)";
    "--debug", Arg.Set debug,
-   "  debug mode";
-  ]
+     "  debug mode";
+   ]
 
 let usage = "usage: mini-c [options] file.c"
 
@@ -55,25 +59,27 @@ let () =
     let p = Rtl.program p in
     if debug then Rtltree.print_file std_formatter p;
     if !interp_rtl then begin ignore (Rtlinterp.program p); exit 0 end;
-    let p_interp = Ertl.program p in
-    let p2 = Ertl.program2 p in
-    if debug then Ertltree.print_file std_formatter p2;
-    if !interp_ertl then begin ignore (Ertlinterp.program p_interp); exit 0 end;
+    let p = Ertl.program p in
+    if debug then Ertltree.print_file std_formatter p;
+    if !interp_ertl then begin ignore (Ertlinterp.program p); exit 0 end;
+    let p = Ltl.program p in
+    if debug then Ltltree.print_file std_formatter p;
+    if !interp_ltl then begin ignore (Ltlinterp.program p); exit 0 end;
     (* ... *)
   with
-  | Lexer.Lexical_error c ->
-    localisation (Lexing.lexeme_start_p buf);
-    eprintf "lexical error: %s@." c;
-    exit 1
-  | Parser.Error ->
-    localisation (Lexing.lexeme_start_p buf);
-    eprintf "syntax error@.";
-    exit 1
-  | Typing.Error s->
-    eprintf "typing error: %s@." s;
-    exit 1
-  | e ->
-    let bt = Printexc.get_backtrace () in
-    eprintf "anomaly: %s\n@." (Printexc.to_string e);
-    eprintf "%s@." bt;
-    exit 2
+    | Lexer.Lexical_error c ->
+	localisation (Lexing.lexeme_start_p buf);
+	eprintf "lexical error: %s@." c;
+	exit 1
+    | Parser.Error ->
+	localisation (Lexing.lexeme_start_p buf);
+	eprintf "syntax error@.";
+	exit 1
+    | Typing.Error s->
+	eprintf "typing error: %s@." s;
+	exit 1
+    | e ->
+        let bt = Printexc.get_backtrace () in
+        eprintf "anomaly: %s\n@." (Printexc.to_string e);
+        eprintf "%s@." bt;
+	exit 2
