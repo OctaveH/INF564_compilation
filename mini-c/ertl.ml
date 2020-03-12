@@ -27,23 +27,64 @@ let rec pull_pile l nextl n : Label.t = match l with
   |[] -> nextl
   |t::q -> let newl = generate (Eget_param(n,t,nextl)) in pull_pile q newl (n+8) (*attention c'est un Eload*)
 (*On met les args dans les registres réels avant Ecall*)
-let rec args_to rfic rreel id k nextl : instr = match (rfic,rreel) with
+let rec args_caller rfic rreel id k nextl : instr = match (rfic,rreel) with
   |([],_)-> Egoto nextl
   |(t::[],r::qr)->Embinop(Mmov,t,r,nextl)
   |(l,[])-> push_pile (reverse l) nextl
   |(t::qf,r::qr)->let i = Embinop(Mmov,t,r,nextl) in
     let newl= generate i in
-    args_to qf qr id k newl
+    args_caller qf qr id k newl
 (*Début de fonction, on met les args dans leur pseudoregistre*)
-let rec to_args rfic rreel nextl : Label.t = match (rfic,rreel) with
+let rec args_callee rfic rreel nextl : Label.t = match (rfic,rreel) with
   |([],_)-> nextl
   |(l,[])-> pull_pile (reverse l) nextl 16
-  |(t::qf,r::qr)->let newl=to_args qf qr nextl in
+  |(t::qf,r::qr)->let newl=args_callee qf qr nextl in
     generate(Embinop(Mmov,r,t,newl))
 
+    let callee_saved nextl =
+      let rec aux l regl nextl = match l with
+        |[] -> (regl,nextl)
+        |t::q -> let r=Register.fresh() in
+          aux q (r::regl) (generate (Embinop(Mmov,t,r,nextl)))
+      in aux Register.callee_saved [] nextl
 
-let to_instr (i:Rtltree.instr) : instr = match i with
-  | Rtltree.Econst (r, n, l) -> Econst (r, n, l)
+    let callee_restaured l nextl =
+      let rec aux l p nextl = match (l,p) with
+        |([],[]) -> nextl
+        |(r::qr,p::qp) -> aux qr qp (generate (Embinop(Mmov,r,p,nextl)))
+        |_ -> assert(false)
+      in aux l (reverse Register.callee_saved) nextl
+
+let begin_fun formals entryl=
+  let newl = args_callee formals Register.parameters entryl in
+  let (locals,newl2) = callee_saved newl in
+  (locals,generate(Ealloc_frame newl2))
+
+let end_fun locals exitl result =
+  let l_end = generate Ereturn in
+  let l_end2 = generate (Edelete_frame l_end) in
+  let l_end3 = callee_restaured locals l_end2 in
+  graph := Label.M.add exitl (Embinop(Mmov,result,Register.rax,l_end3)) !graph
+
+let end_fun_terminal locals nextl =
+  let l_end = generate (Edelete_frame nextl) in
+  callee_restaured locals l_end
+
+
+(*Optimisation des appels terminaux :
+  Côté appelé ->
+  Enlève le Ealloc_frame
+  Je peux changer la fin de l'appeleur et le début de l'appelé, mais pas la fin de l'appelé, donc je dois garder la partie callee_saved
+  Côté appeleur ->
+  Enlève le Edelete_frame, le Ereturn,
+  le result de rax dans r puis de r dans rax
+*)
+
+
+
+
+let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
+  | Rtltree.Econst (r, n, l) -> Econst(r, n, l)
   | Rtltree.Eload (r1,n,r2,l) -> Eload (r1,n,r2,l)
   | Rtltree.Estore (r1,r2,n,l) -> Estore (r1,r2,n,l)
   | Rtltree.Emunop (op,r,l) -> Emunop (op,r,l)
@@ -55,59 +96,67 @@ let to_instr (i:Rtltree.instr) : instr = match i with
   | Rtltree.Emubranch (b,r,l1,l2) -> Emubranch (b,r,l1,l2)
   | Rtltree.Embbranch (b,r1,r2,l1,l2) -> Embbranch (b,r1,r2,l1,l2)
   | Rtltree.Egoto l -> Egoto l
-  | Rtltree.Ecall (r,id,args,l) -> let k = length args in
-    let i = Embinop(Mmov,Register.result,r,l) in
-    let newl = generate i in
-    if (k>6) then let i2 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl) in
-      let newl2 = generate i2 in
-      let i3 = Ecall(id,k,newl2) in
-      let newl3 = generate i3 in
-      args_to args Register.parameters id k newl3
+  | Rtltree.Ecall (r,id,args,l) ->
+    let k = length args in
+    if l = exitl then (*Optimisation des appels terminaux*)
+      if (k>6) then
+        let endl = generate Ereturn in
+        let i = Ecall (id,k,endl) in
+        let newl = generate i in
+        let newl2 = end_fun_terminal locals newl in
+        let i3 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl2) in
+        let newl3 = generate i3 in
+        args_caller args Register.parameters id k newl3
+        (* let i = Embinop(Mmov,Register.result,r,l) in
+        let newl = generate i in
+        let i2 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl) in
+        let newl2 = generate i2 in
+        let i3 = Ecall(id,k,newl2) in
+        let newl3 = generate i3 in
+          args_caller args Register.parameters id k newl3*)
 
-    else let i2 = Ecall(id,k,newl) in
-      let newl2 = generate i2 in
-      args_to args Register.parameters id k newl2
 
+      else let endl = generate Ereturn in
+        let i = Ecall (id,k,endl) in
+        let newl = generate i in
+        let newl2 = end_fun_terminal locals newl in
+        args_caller args Register.parameters id k newl2
 
+    else (*Cas normal*)
+      let i = Embinop(Mmov,Register.result,r,l) in
+      let newl = generate i in
+      if (k>6) then let i2 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl) in
+        let newl2 = generate i2 in
+        let i3 = Ecall(id,k,newl2) in
+        let newl3 = generate i3 in
+        args_caller args Register.parameters id k newl3
+      else let i2 = Ecall(id,k,newl) in
+        let newl2 = generate i2 in
+        args_caller args Register.parameters id k newl2
 
-let  tocfg  cfg =
+let  tocfg cfg locals exitl =
   (*graph := Label.M.empty;*)
   let aux l i =
-    let newi = to_instr i in
+    let newi = to_instr i locals exitl in
     graph := Label.M.add l newi !graph in
   Label.M.iter aux cfg
 
-let callee_saved nextl =
-  let rec aux l regl nextl = match l with
-    |[] -> (regl,nextl)
-    |t::q -> let r=Register.fresh() in
-      aux q (r::regl) (generate (Embinop(Mmov,t,r,nextl)))
-  in aux Register.callee_saved [] nextl
 
-let callee_restaured l nextl =
-  let rec aux l p nextl = match (l,p) with
-    |([],[]) -> nextl
-    |(r::qr,p::qp) -> aux qr qp (generate (Embinop(Mmov,r,p,nextl)))
-    |_ -> assert(false)
-  in aux l (reverse Register.callee_saved) nextl
 
 
 
 let tofun (f:Rtltree.deffun) : deffun =
-  tocfg f.fun_body;
+
   let k = length f.fun_formals in
-  let newl = to_args f.fun_formals Register.parameters f.fun_entry in
-  let (locals,newl2) = callee_saved newl in
-  let newl3 = generate(Ealloc_frame newl2) in
-  let l_end = generate Ereturn in
-  let l_end2 = generate (Edelete_frame l_end) in
-  let l_end3 = callee_restaured locals l_end2 in
-  graph := Label.M.add f.fun_exit (Embinop(Mmov,f.fun_result,Register.rax,l_end3)) !graph;
+  let (locals,entryl) = begin_fun f.fun_formals f.fun_entry in
+  tocfg f.fun_body locals f.fun_exit;
+  end_fun locals f.fun_exit f.fun_result ;
+
   {
     fun_name = f.fun_name;
     fun_formals = k; (* nb total d'arguments *)
     fun_locals = f.fun_locals;
-    fun_entry = newl3;
+    fun_entry = entryl;
     fun_body = !graph;
   }
 
@@ -143,7 +192,9 @@ let succ_defs_uses i = match i with
   | Eload (r1,n,r2,l) -> ([l],[r2],[r1])
   | Estore (r1,r2,n,l) -> ([l],[r1],[r2])
   | Emunop (n,r,l) -> ([l],[r],[r])
-  | Embinop (n,r1,r2,l) -> ([l],[r2],[r1;r2])
+  | Embinop (n,r1,r2,l) -> begin match n with
+    |Mdiv -> ([l],[r2],[r1;r2;Register.rax])
+    |_ -> ([l],[r2],[r1;r2]) end
   | Emubranch (n,r,l1,l2) -> ([l1;l2],[],[r])
   | Embbranch (n,r1,r2,l1,l2) -> ([l1;l2],[],[r1;r2])
   | Egoto l -> ([l],[],[])
