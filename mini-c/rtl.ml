@@ -3,12 +3,13 @@ open Rtltree
 (*le control flow graph est stocké dans une variable globale*)
 let graph = ref Label.M.empty
 
-(*génère une étiquette et met i dans le graphe avec cette étiquette, puis renvoie l'étiquette *)
+(*Génère une étiquette et met i dans le graphe avec cette étiquette, puis renvoie l'étiquette *)
 let generate i =
     let l = Label.fresh () in
     graph := Label.M.add l i !graph;
     l
 
+(*Quelques fonctions de base*)
 let snd x = match x with
   |(a,b)->b
 
@@ -24,7 +25,7 @@ let match_id varreg id = try
   | Not_found ->
     raise (Typing.Error ("Variable \"" ^ id ^ "\" not declared"))
 
-
+(*Traduction des expressions en instructions*)
 let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr = match e with
   | Econst n -> Econst(n,destr,destl)
   | Eaccess_local id -> let r = match_id varreg id in
@@ -95,8 +96,6 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
             let i = expr varreg e1 r1 newl in
             let newl2 = generate(i) in
             expr varreg e2 destr newl2 end
-          (*si on peut faire des décalages, on peut faire de la multiplication par un entier intelligemment*)
-
       |Ptree.Bdiv -> begin match (e1.expr_node,e2.expr_node) with
           |(Ttree.Econst m, Ttree.Econst n)-> Econst(Int32.div m n,destr,destl)
           |(e, Ttree.Econst 1l) -> expr varreg e destr destl
@@ -126,7 +125,6 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
             let newl = generate (Embinop(Msetne,r1,destr,destl)) in
             let i = expr varreg e1 r1 newl in
             let newl2 = generate(i) in
-
             expr varreg e2 destr newl2 end
       | Ptree.Blt -> begin match (e1.expr_node,e2.expr_node) with
           |(Econst m, Econst n) -> if Int32.compare m n < 0 then Econst(1l,destr,destl) else Econst(0l,destr,destl)
@@ -159,12 +157,10 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
       |Ptree.Band -> let falsel=generate(Econst(0l,destr,destl)) in
         let truel=generate(Econst(1l,destr,destl)) in
         condition varreg (Ttree.Ebinop (Ptree.Band, e1, e2)) truel falsel
-
       |Ptree.Bor -> let falsel=generate(Econst(0l,destr,destl)) in
         let truel=generate(Econst(1l,destr,destl)) in
         condition varreg (Ttree.Ebinop (Ptree.Bor, e1, e2)) truel falsel end
-
-  |Ttree.Ecall(id,exprlist) -> let result = Register.fresh() in
+  |Ttree.Ecall(id,exprlist) ->
     let endcall = Label.fresh() in
     let rec aux nextl (exprlist:Ttree.expr list) reglist = match exprlist with
       |[]->(reglist,(Egoto nextl))
@@ -179,11 +175,8 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
   |Ttree.Esizeof s -> Econst (Int32.mul (Int32.of_int 8) s.str_size,destr,destl)
 
 
-
-
-  (*où e est l'expression à traduire, destr le registre de destination de la valeur de cette expression
-    et destl l'étiquette où il faut transférer ensuite le contrôle.*)
-
+(*Si e est non-nul truel sinon falsel
+Disjonction des cas pour optimiser*)
 and condition varreg (e:Ttree.expr_node) truel falsel : instr = match e with
   | Econst n -> if Int32.equal n 0l then (Egoto falsel) else (Egoto truel)
   | Eunop (op,e) -> begin match op with
@@ -194,7 +187,6 @@ and condition varreg (e:Ttree.expr_node) truel falsel : instr = match e with
           |(Ttree.Econst m, Ttree.Econst n)-> if Int32.add m n == 0l then Egoto truel else Egoto falsel
           |(Ttree.Econst 0l, e) -> condition varreg e truel falsel
           |(e, Ttree.Econst 0l) -> condition varreg e truel falsel
-
           |(e1,e2) -> let r1 = Register.fresh() in
             let r2 = Register.fresh() in
             let newl = generate (Emubranch(Mjnz,r2,truel,falsel)) in
@@ -202,7 +194,6 @@ and condition varreg (e:Ttree.expr_node) truel falsel : instr = match e with
             let i = expr varreg e1 r1 newl2 in
             let newl3 = generate(i) in
             expr varreg e2 r2 newl3 end
-
       |Ptree.Bsub -> begin match (e1.expr_node,e2.expr_node) with
           |(Ttree.Econst m, Ttree.Econst n)-> if Int32.sub m n == 0l then Egoto truel else Egoto falsel
           |(e, Ttree.Econst 0l) -> condition varreg e truel falsel
@@ -298,43 +289,12 @@ and condition varreg (e:Ttree.expr_node) truel falsel : instr = match e with
             expr varreg e2 r2 newl2 end
       |Ptree.Band -> condition varreg e1.expr_node (generate(condition varreg e2.expr_node truel falsel)) falsel
       |Ptree.Bor -> condition varreg e1.expr_node truel (generate(condition varreg e2.expr_node truel falsel)) end
-                                 (*)|Ecall (id,exprlist)-> let result = Register.fresh() in
-    let newl1 = generate (Emubranch(Mjnz,result,truel,falsel)) in
-    let endcall = Label.fresh() in
-    let rec aux nextl (exprlist:Ttree.expr list) reglist = match exprlist with
-      |e::[]-> let r = Register.fresh() in
-        (r::reglist,expr varreg e.expr_node r nextl)
-      |e::q -> let r = Register.fresh() in
-        let i = expr varreg e.expr_node r nextl in
-        let newl = generate i in
-        aux newl q (r::reglist)
-    in let (reglist,i) = aux endcall exprlist [] in
-    (graph := Label.M.add endcall (Ecall(result, id,reverse reglist,newl1)) !graph; i)
-  | Eaccess_local id -> Emubranch(Mjnz,Hashtbl.find varreg id,truel,falsel)
-  | Eaccess_field (e,field) -> let result = Register.fresh() in
-    let newl = generate (Emubranch(Mjnz,result,truel,falsel)) in
-    let t = e.expr_typ in
-    begin match t with
-      |Tstructp s -> let f = Hashtbl.find s.str_fields field.field_name in
-        let r = Register.fresh() in
-        let i = Eload(r,8*f.field_pos,result,newl) in
-        let newl2 = generate i in
-        expr varreg e.expr_node r newl2
-      |_ -> assert(false) end
-  | Eassign_local (id,e)-> let r = Register.fresh() in
-    let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
-    let newl2 = generate(Embinop(Mmov,r,Hashtbl.find varreg id, newl)) in
-    expr varreg e.expr_node r newl2
-
-
-  | Eassign_field (e1,field,e2)->assert(false)
-  | Esizeof s->assert(false)*)
   |e -> let r=Register.fresh() in
     let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
     expr varreg e r newl
 
-
-
+(*Transforme les arguments et variables locales en registres,
+  remplit varreg pour faire le lien entre les deux*)
 let reg_alloc_for_var varreg (l: Ttree.decl_var list): register list =
   let rec aux_reg_alloc m l = match l with
     |[] -> m
@@ -342,9 +302,7 @@ let reg_alloc_for_var varreg (l: Ttree.decl_var list): register list =
   in aux_reg_alloc [] l
 
 
-
-
-
+(*Traduit les stmt en instruction*)
 let rec stmt varreg (s : Ttree.stmt) (destl:label) (retr:register) (exitl:label) : instr = match s with
   | Sskip -> Egoto destl
   | Sexpr e -> let r = Register.fresh() in expr varreg e.expr_node r destl (*générer new register ou garder retr ?*)
@@ -358,29 +316,11 @@ let rec stmt varreg (s : Ttree.stmt) (destl:label) (retr:register) (exitl:label)
     let truel = generate i in
     let i2 = condition varreg e.expr_node truel destl in
     (graph := Label.M.add whilel i2 !graph; Egoto whilel)
-
-(*let whilel = Label.fresh() in
-    let i = stmt varreg s whilel retr exitl in
-    let truel = generate i in
-    (graph := Label.M.add whilel (condition varreg e.expr_node truel destl) !graph;
-                      Egoto whilel)*)
-
   | Sblock block ->
     let (var,body) = block in
-    let varlist = reg_alloc_for_var varreg var in
-    block_to_cfg varreg destl retr body(*à quel niveau je gère les variables ? là dans ma fonction j'ai  une table var-reg et une liste de reg. Gérer un block c'est presque appeler une fonction interne*)
+    let _ = reg_alloc_for_var varreg var in
+    block_to_cfg varreg destl retr body
   | Sreturn e -> expr varreg e.expr_node retr exitl
-
-(* s est l'instruction à traduire et destl l'étiquette où il faut transférer ensuite le contrôle. Lorsque l'instruction est return,
-   la valeur renvoyée doit être mise dans le registre retr et le contrôle doit être passé à l'étiquette exitl. *)
-
-(* Écrire une fonction deffun qui traduit une fonction mini-C vers le type Rtltree.deffun des fonctions RTL.
-   Il suffit de créer un pseudo-registre pour le résultat et une étiquette pour la sortie,
-   avant d'appeler la fonction précédente sur le corps de la fonction mini-C.
-
-   Écrire enfin une fonction qui traduit un programme mini-C vers le type Rtltree.file, en traduisant chacune des fonctions.
-
-*)
 
 and  block_to_cfg varreg exitl result (b:Ttree.stmt list) : instr =
   let rec aux exitl nextl result l = match l with
@@ -390,9 +330,6 @@ and  block_to_cfg varreg exitl result (b:Ttree.stmt list) : instr =
       let newl = generate i in
       aux exitl newl result q
   in aux exitl exitl result (reverse b)
-
-
-
 
 let body_to_cfg varreg entryl exitl result (b:Ttree.stmt list) =
   let rec aux exitl nextl result l = match l with
@@ -405,16 +342,6 @@ let body_to_cfg varreg entryl exitl result (b:Ttree.stmt list) =
   in aux exitl exitl result (reverse b)
 
 
-
-
-
-
-
-(*Production de code*)
-(*D'une fonction de Ttree à une vraie fonction*)
-(*Allouer pseudo-reg frais (Register.fresh()) pour args, result et vars,
-  On part d'un graphe vide avec new label L2(Label.fresh()) pour la sortie
-  Le résultat est le label d'entrée L1*)
 let declfun_to_deffun (f:Ttree.decl_fun) : deffun =
   let entryl = Label.fresh() in
   let exitl = Label.fresh() in
@@ -422,10 +349,8 @@ let declfun_to_deffun (f:Ttree.decl_fun) : deffun =
   let varreg = Hashtbl.create 100 in
   let args = reg_alloc_for_var varreg f.fun_formals in
   let (var,body) = f.fun_body in
-
   let varloc = reg_alloc_for_var varreg var in
-
-  (*graph := Label.M.empty;*)
+  graph := Label.M.empty;
   body_to_cfg varreg entryl exitl result body;
   {fun_name   = f.fun_name;
   fun_formals = reverse args;
