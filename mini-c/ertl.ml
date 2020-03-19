@@ -195,8 +195,9 @@ let succ_defs_uses i = match i with
   | Estore (r1,r2,n,l) -> ([l],[r1],[r2])
   | Emunop (n,r,l) -> ([l],[r],[r])
   | Embinop (n,r1,r2,l) -> begin match n with
-    |Mdiv -> ([l],[r2],[r1;r2;Register.rax])
-    |_ -> ([l],[r2],[r1;r2]) end
+      | Mdiv -> ([l],[r2],[r1;r2;Register.rax])
+      | Mmov -> ([l],[r2],[r1])
+      |_ -> ([l],[r2],[r1;r2]) end
   | Emubranch (n,r,l1,l2) -> ([l1;l2],[],[r])
   | Embbranch (n,r1,r2,l1,l2) -> ([l1;l2],[],[r1;r2])
   | Egoto l -> ([l],[],[])
