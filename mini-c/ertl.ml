@@ -101,7 +101,7 @@ let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
     if l = exitl then (*Optimisation des appels terminaux*)
       if (k>6) then
         let endl = generate Ereturn in
-        let i = Ecall (id,k,endl) in
+        let i = Ecall (id,6,endl) in  (*J'ai remplacé k par 6, le nombre de registres utilisés*)
         let newl = generate i in
         let newl2 = end_fun_terminal locals newl in
         let i3 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl2) in
@@ -127,7 +127,7 @@ let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
       let newl = generate i in
       if (k>6) then let i2 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl) in
         let newl2 = generate i2 in
-        let i3 = Ecall(id,k,newl2) in
+        let i3 = Ecall(id,6,newl2) in
         let newl3 = generate i3 in
         args_caller args Register.parameters id k newl3
       else let i2 = Ecall(id,k,newl) in
@@ -189,31 +189,29 @@ let some_param n =
   in aux Register.parameters n
 
 
-let succ_defs_uses i = match i with
-  | Econst (n,r,l) -> ([l],[r],[])
-  | Eload (r1,n,r2,l) -> ([l],[r2],[r1])
-  | Estore (r1,r2,n,l) -> ([l],[r1],[r2])
-  | Emunop (n,r,l) -> ([l],[r],[r])
-  | Embinop (n,r1,r2,l) -> begin match n with
-      | Mdiv -> ([l],[r2],[r1;r2;Register.rax])
-      | Mmov -> ([l],[r2],[r1])
-      |_ -> ([l],[r2],[r1;r2]) end
-  | Emubranch (n,r,l1,l2) -> ([l1;l2],[],[r])
-  | Embbranch (n,r1,r2,l1,l2) -> ([l1;l2],[],[r1;r2])
-  | Egoto l -> ([l],[],[])
-  | Ecall (id,n,l) -> ([l],Register.caller_saved,some_param n)
-  | Ealloc_frame l -> ([l],[],[])
-  | Edelete_frame l -> ([l],[],[])
-  | Eget_param (n,r,l) -> ([l],[r],[])
-  | Epush_param (r,l) -> ([l],[],[r])
-  | Ereturn -> ([],[],Register.result::Register.callee_saved)
+let find_succ i = match i with
+  | Econst (n,r,l) -> [l]
+  | Eload (r1,n,r2,l) -> [l]
+  | Estore (r1,r2,n,l) -> [l]
+  | Emunop (n,r,l) -> [l]
+  | Embinop (n,r1,r2,l) -> [l]
+  | Emubranch (n,r,l1,l2) -> [l1;l2]
+  | Embbranch (n,r1,r2,l1,l2) -> [l1;l2]
+  | Egoto l -> [l]
+  | Ecall (id,n,l) -> [l]
+  | Ealloc_frame l -> [l]
+  | Edelete_frame l -> [l]
+  | Eget_param (n,r,l) -> [l]
+  | Epush_param (r,l) -> [l]
+  | Ereturn -> []
 
 (*Create_live_info crée une Map entre qui relie chaque Label à ses infos
   instr,succ,defs et uses sont bons
   Reste à compléter pred, ins et outs*)
 let create_live_info cfg =
   let aux label i =
-    let (succ,defs,uses) = succ_defs_uses i in
+    let succ = find_succ i in
+    let (defs,uses)= def_use i in
     let info =
       {
         instr = i;
