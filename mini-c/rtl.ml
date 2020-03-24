@@ -25,6 +25,7 @@ let match_id varreg id = try
   | Not_found ->
     raise (Typing.Error ("Variable \"" ^ id ^ "\" not declared"))
 
+
 (*Traduction des expressions en instructions*)
 let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr = match e with
   | Econst n -> Econst(n,destr,destl)
@@ -53,113 +54,36 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
   | Eunop (unop,e) -> begin match unop with
       |Ptree.Unot -> begin match e.expr_node with
           |Ttree.Econst n -> if Int32.equal n 0l then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |e ->
-            let newl = generate(Emunop(Msetei 0l,destr,destl)) in
-            expr varreg e destr newl end
+          |e -> let ee = expr varreg e destr destl in
+            begin match ee with
+              |Econst(m,_,_)-> if Int32.equal m 0l then Econst(1l,destr,destl) else Econst(0l,destr,destl)
+              |_-> let newl = generate(Emunop(Msetei 0l,destr,destl)) in
+            expr varreg e destr newl end end
       |Ptree.Uminus ->  begin match e.expr_node with
           |Econst n -> Econst(Int32.neg n,destr,destl)
-          |e -> let rzero = Register.fresh() in
+          |e -> let ee = expr varreg e destr destl in
+            begin match ee with
+              |Econst(m,_,_)-> Econst(Int32.neg m,destr,destl)
+              |_-> let rzero = Register.fresh() in
             let newl = generate(Embinop(Msub,rzero,destr,destl)) in
             let newl2 = generate(Econst(0l,destr,newl)) in
-            expr varreg e rzero newl2 end end(*let newl = generate (Emunop(munop unop,destr,destl))in
+                expr varreg e rzero newl2 end end end(*let newl = generate (Emunop(munop unop,destr,destl))in
                                       expr e.expr_node destr newl*)
-  | Ebinop (binop,e1,e2) -> begin match binop with
-      |Ptree.Badd -> begin match (e1.expr_node,e2.expr_node) with
-          |(Ttree.Econst m, Ttree.Econst n)->Econst(Int32.add m n,destr,destl)
-          |(Ttree.Econst 0l, e) -> expr varreg e destr destl
-          |(e, Ttree.Econst 0l) -> expr varreg e destr destl
-          |(Ttree.Econst n, e) -> let newl = generate(Emunop(Maddi n,destr,destl)) in
-                            expr varreg e destr newl
-          |(e, Econst n) -> let newl = generate(Emunop(Maddi n,destr,destl)) in
-            expr varreg e destr newl
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Madd,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      |Ptree.Bsub -> begin match (e1.expr_node,e2.expr_node) with
-          |(Ttree.Econst m, Ttree.Econst n)-> Econst(Int32.sub m n,destr,destl)
-          |(e, Ttree.Econst 0l) -> expr varreg e destr destl
-          |(e, Econst n) -> let newl = generate(Emunop(Maddi (Int32.neg n),destr,destl)) in
-            expr varreg e destr newl
-          |(e1,e2) -> let r2 = Register.fresh() in
-            let newl = generate (Embinop(Msub,r2,destr,destl)) in
-            let i = expr varreg e2 r2 newl in
-            let newl2 = generate(i) in
-            expr varreg e1 destr newl2 end
-      |Ptree.Bmul -> begin match (e1.expr_node,e2.expr_node) with
-          |(Ttree.Econst m, Ttree.Econst n)-> Econst(Int32.mul m n,destr,destl)
-          |(e, Ttree.Econst 1l) -> expr varreg e destr destl
-          |(Ttree.Econst 1l, e) -> expr varreg e destr destl
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Mmul,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      |Ptree.Bdiv -> begin match (e1.expr_node,e2.expr_node) with
-          |(Ttree.Econst m, Ttree.Econst n)-> Econst(Int32.div m n,destr,destl)
-          |(e, Ttree.Econst 1l) -> expr varreg e destr destl
-          |(e1,e2) -> let r2 = Register.fresh() in
-            let newl = generate (Embinop(Mdiv,r2,destr,destl)) in
-            let i = expr varreg e1 destr newl in
-            let newl2 = generate(i) in
-            expr varreg e2 r2 newl2 end
-      | Ptree.Beq -> begin match (e1.expr_node,e2.expr_node) with
-          |(Econst m, Econst n) -> if Int32.compare m n == 0 then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |(Econst n, e) -> let newl = generate(Emunop(Msetei n,destr,destl)) in
-            expr varreg e destr newl
-          |(e, Econst n) -> let newl = generate(Emunop(Msetei n,destr,destl)) in
-            expr varreg e destr newl
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Msete,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      | Ptree.Bneq -> begin match (e1.expr_node,e2.expr_node) with
-          |(Econst m, Econst n) -> if Int32.compare m n == 0 then Econst(0l,destr,destl) else Econst(1l,destr,destl)
-          |(Econst n, e) -> let newl = generate(Emunop(Msetnei n,destr,destl)) in
-            expr varreg e destr newl
-          |(e, Econst n) -> let newl = generate(Emunop(Msetnei n,destr,destl)) in
-            expr varreg e destr newl
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Msetne,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      | Ptree.Blt -> begin match (e1.expr_node,e2.expr_node) with
-          |(Econst m, Econst n) -> if Int32.compare m n < 0 then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Msetl,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      | Ptree.Ble -> begin match (e1.expr_node,e2.expr_node) with
-          |(Econst m, Econst n) -> if Int32.compare m n <= 0 then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Msetle,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      | Ptree.Bgt -> begin match (e1.expr_node,e2.expr_node) with
-          |(Econst m, Econst n) -> if Int32.compare m n > 0 then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Msetg,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      | Ptree.Bge -> begin match (e1.expr_node,e2.expr_node) with
-          |(Econst m, Econst n) -> if Int32.compare m n >= 0 then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let newl = generate (Embinop(Msetge,r1,destr,destl)) in
-            let i = expr varreg e1 r1 newl in
-            let newl2 = generate(i) in
-            expr varreg e2 destr newl2 end
-      |Ptree.Band -> let falsel=generate(Econst(0l,destr,destl)) in
-        let truel=generate(Econst(1l,destr,destl)) in
-        condition varreg (Ttree.Ebinop (Ptree.Band, e1, e2)) truel falsel
-      |Ptree.Bor -> let falsel=generate(Econst(0l,destr,destl)) in
-        let truel=generate(Econst(1l,destr,destl)) in
-        condition varreg (Ttree.Ebinop (Ptree.Bor, e1, e2)) truel falsel end
+  | Ebinop (binop,e1,e2) -> begin
+    let ee1 = expr varreg e1.expr_node destr destl in (*Les instructions construites ici ne seront pas utilisées*)
+    let ee2 = expr varreg e2.expr_node destr destl in
+    match (ee1,ee2) with
+    |(Econst(n1,_,l1),Econst(n2,_,l2))-> if l1==destl then begin
+        if l2==destl then Econst (cc binop n1 n2, destr, destl)
+        else ce varreg binop n1 e2 destr destl end
+      else begin
+        if l2==destl then ec varreg binop e1 n2 destr destl
+        else ee varreg binop e1 e2 destr destl end
+    |(Econst(n,_,l),_)-> if l==destl then ce varreg binop n e2 destr destl
+      else ee varreg binop e1 e2 destr destl
+    |(_,Econst(n,_,l))-> if l==destl then ec varreg binop e1 n destr destl
+      else ee varreg binop e1 e2 destr destl
+    |(_,_)->ee varreg binop e1 e2 destr destl end
   |Ttree.Ecall(id,exprlist) ->
     let endcall = Label.fresh() in
     let rec aux nextl (exprlist:Ttree.expr list) reglist = match exprlist with
@@ -174,6 +98,175 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
     (graph := Label.M.add endcall (Ecall(destr, id,reverse reglist,destl)) !graph; i)
   |Ttree.Esizeof s -> Econst (Int32.mul (Int32.of_int 8) s.str_size,destr,destl)
 
+and cc b m n = match b with
+  |Ptree.Beq -> if Int32.equal m n then 1l else 0l
+  |Ptree.Bneq -> if Int32.equal m n then 0l else 1l
+  |Ptree.Blt -> if Int32.compare m n < 0 then 1l else 0l
+  |Ptree.Ble -> if Int32.compare m n <= 0 then 1l else 0l
+  |Ptree.Bgt -> if Int32.compare m n > 0 then 1l else 0l
+  |Ptree.Bge -> if Int32.compare m n >= 0 then 1l else 0l
+  |Ptree.Badd -> Int32.add m n
+  |Ptree.Bsub -> Int32.sub m n
+  |Ptree.Bmul -> Int32.mul m n
+  |Ptree.Bdiv -> Int32.div m n
+  |Ptree.Band -> if Int32.equal m 0l || Int32.equal n 0l then 0l else 1l
+  |Ptree.Bor -> if Int32.equal m 0l && Int32.equal n 0l then 0l else 1l
+
+
+and ce varreg b n e destr destl =
+  match b with
+  |Ptree.Beq -> let newl = generate(Emunop(Msetei n,destr,destl)) in
+    expr varreg e.expr_node destr newl
+  |Ptree.Bneq -> let newl = generate(Emunop(Msetnei n,destr,destl)) in
+    expr varreg e.expr_node destr newl
+  |Ptree.Blt -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetl,r,destr,destl)) in
+    let newl2 = generate(Econst(n,r,newl)) in
+    expr varreg e.expr_node destr newl2
+  |Ptree.Ble -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetle,r,destr,destl)) in
+    let newl2 = generate(Econst(n,r,newl)) in
+    expr varreg e.expr_node destr newl2
+  |Ptree.Bgt -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetg,r,destr,destl)) in
+    let newl2 = generate(Econst(n,r,newl)) in
+    expr varreg e.expr_node destr newl2
+  |Ptree.Bge -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetge,r,destr,destl)) in
+    let newl2 = generate(Econst(n,r,newl)) in
+    expr varreg e.expr_node destr newl2
+  |Ptree.Badd -> if Int32.equal n 0l then expr varreg e.expr_node destr destl
+    else let newl = generate(Emunop(Maddi n,destr,destl)) in
+      expr varreg e.expr_node destr newl
+  |Ptree.Bsub -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msub,r,destr,destl)) in
+    let newl2 = generate(Econst(n,destr,newl)) in
+    expr varreg e.expr_node r newl2
+  |Ptree.Bmul -> if Int32.equal n 1l then expr varreg e.expr_node destr destl
+    else let r = Register.fresh() in
+      let newl = generate(Embinop(Mmul,r,destr,destl)) in
+      let newl2 = generate(Econst(n,r,newl)) in
+      expr varreg e.expr_node destr newl2
+  |Ptree.Bdiv -> let r = Register.fresh() in
+      let newl = generate(Embinop(Mmul,r,destr,destl)) in
+      let newl2 = generate(Econst(n,r,newl)) in
+      expr varreg e.expr_node destr newl2
+  |Ptree.Band -> if Int32.equal n 0l then Econst(0l,destr,destl) else
+      let falsel=generate(Econst(0l,destr,destl)) in
+      let truel=generate(Econst(1l,destr,destl)) in
+      condition varreg e.expr_node truel falsel
+  |Ptree.Bor -> if Int32.equal n 0l then
+      let falsel=generate(Econst(0l,destr,destl)) in
+      let truel=generate(Econst(1l,destr,destl)) in
+      condition varreg e.expr_node truel falsel
+    else Econst(1l,destr,destl)
+
+
+
+and ec varreg b e n destr destl =
+  match b with
+  |Ptree.Beq -> let newl = generate(Emunop(Msetei n,destr,destl)) in
+    expr varreg e.expr_node destr newl
+  |Ptree.Bneq -> let newl = generate(Emunop(Msetnei n,destr,destl)) in
+    expr varreg e.expr_node destr newl
+  |Ptree.Blt -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetl,r,destr,destl)) in
+    let newl2 = generate(Econst(n,destr,newl)) in
+    expr varreg e.expr_node r newl2
+  |Ptree.Ble -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetle,r,destr,destl)) in
+    let newl2 = generate(Econst(n,destr,newl)) in
+    expr varreg e.expr_node r newl2
+  |Ptree.Bgt -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetg,r,destr,destl)) in
+    let newl2 = generate(Econst(n,destr,newl)) in
+    expr varreg e.expr_node r newl2
+  |Ptree.Bge -> let r = Register.fresh() in
+    let newl = generate(Embinop(Msetge,r,destr,destl)) in
+    let newl2 = generate(Econst(n,destr,newl)) in
+    expr varreg e.expr_node r newl2
+  |Ptree.Badd -> if Int32.equal n 0l then expr varreg e.expr_node destr destl
+    else let newl = generate(Emunop(Maddi n,destr,destl)) in
+      expr varreg e.expr_node destr newl
+  |Ptree.Bsub -> if Int32.equal n 0l then expr varreg e.expr_node destr destl
+    else let newl = generate(Emunop(Maddi (Int32.neg n),destr,destl)) in
+      expr varreg e.expr_node destr newl
+  |Ptree.Bmul -> if Int32.equal n 1l then expr varreg e.expr_node destr destl
+    else let r = Register.fresh() in
+      let newl = generate(Embinop(Mmul,r,destr,destl)) in
+      let newl2 = generate(Econst(n,r,newl)) in
+      expr varreg e.expr_node destr newl2
+  |Ptree.Bdiv -> if Int32.equal n 1l then expr varreg e.expr_node destr destl
+        else let r = Register.fresh() in
+          let newl = generate(Embinop(Mdiv,r,destr,destl)) in
+          let newl2 = generate(Econst(n,r,newl)) in
+          expr varreg e.expr_node destr newl2
+  |Ptree.Band -> let falsel=generate(Econst(0l,destr,destl)) in
+    let truel=generate(Econst(1l,destr,destl)) in
+    condition varreg (Ttree.Ebinop (Ptree.Band, e, {expr_node=Econst(n);expr_typ=Tint})) truel falsel
+  |Ptree.Bor -> let falsel=generate(Econst(0l,destr,destl)) in
+    let truel=generate(Econst(1l,destr,destl)) in
+    condition varreg (Ttree.Ebinop (Ptree.Bor, e, {expr_node=Econst(n);expr_typ=Tint})) truel falsel
+
+
+and ee varreg b e1 e2 destr destl =
+match b with
+|Ptree.Beq -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Msete,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Bneq -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Msetne,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Blt -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Msetl,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Ble -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Msetle,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Bgt -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Msetg,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Bge -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Msetge,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Badd -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Madd,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Bsub -> let r2 = Register.fresh() in
+  let newl = generate (Embinop(Msub,r2,destr,destl)) in
+  let i = expr varreg e1.expr_node destr newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node r2 newl2
+|Ptree.Bmul -> let r1 = Register.fresh() in
+  let newl = generate (Embinop(Mmul,r1,destr,destl)) in
+  let i = expr varreg e1.expr_node r1 newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node destr newl2
+|Ptree.Bdiv -> let r2 = Register.fresh() in
+  let newl = generate (Embinop(Mdiv,r2,destr,destl)) in
+  let i = expr varreg e1.expr_node destr newl in
+  let newl2 = generate(i) in
+  expr varreg e2.expr_node r2 newl2
+|Ptree.Band -> let falsel=generate(Econst(0l,destr,destl)) in
+  let truel=generate(Econst(1l,destr,destl)) in
+  condition varreg (Ttree.Ebinop (Ptree.Band, e1, e2)) truel falsel
+|Ptree.Bor -> let falsel=generate(Econst(0l,destr,destl)) in
+  let truel=generate(Econst(1l,destr,destl)) in
+  condition varreg (Ttree.Ebinop (Ptree.Bor, e1, e2)) truel falsel
 
 (*Si e est non-nul truel sinon falsel
 Disjonction des cas pour optimiser*)
@@ -187,62 +280,38 @@ and condition varreg (e:Ttree.expr_node) truel falsel : instr = match e with
           |(Ttree.Econst m, Ttree.Econst n)-> if Int32.add m n == 0l then Egoto truel else Egoto falsel
           |(Ttree.Econst 0l, e) -> condition varreg e truel falsel
           |(e, Ttree.Econst 0l) -> condition varreg e truel falsel
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let r2 = Register.fresh() in
-            let newl = generate (Emubranch(Mjnz,r2,truel,falsel)) in
-            let newl2 = generate (Embinop(Madd,r1,r2,newl)) in
-            let i = expr varreg e1 r1 newl2 in
-            let newl3 = generate(i) in
-            expr varreg e2 r2 newl3 end
+          |_ -> let r=Register.fresh() in
+            let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
+            expr varreg e r newl end
       |Ptree.Bsub -> begin match (e1.expr_node,e2.expr_node) with
           |(Ttree.Econst m, Ttree.Econst n)-> if Int32.sub m n == 0l then Egoto truel else Egoto falsel
           |(e, Ttree.Econst 0l) -> condition varreg e truel falsel
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let r2 = Register.fresh() in
-            let newl = generate (Emubranch(Mjnz,r2,truel,falsel)) in
-            let newl2 = generate (Embinop(Msub,r1,r2,newl)) in
-            let i = expr varreg e1 r1 newl2 in
-            let newl3 = generate(i) in
-            expr varreg e2 r2 newl3 end
+          |_ -> let r=Register.fresh() in
+            let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
+            expr varreg e r newl end
       |Ptree.Bmul -> begin match (e1.expr_node,e2.expr_node) with
           |(Ttree.Econst m, Ttree.Econst n)-> if Int32.mul m n == 0l then Egoto truel else Egoto falsel
           |(e, Ttree.Econst 1l) -> condition varreg e truel falsel
           |(Ttree.Econst 1l, e) -> condition varreg e truel falsel
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let r2 = Register.fresh() in
-            let newl = generate (Emubranch(Mjnz,r2,truel,falsel)) in
-            let newl2 = generate (Embinop(Mmul,r1,r2,newl)) in
-            let i = expr varreg e1 r1 newl2 in
-            let newl3 = generate(i) in
-            expr varreg e2 r2 newl3 end
+          |_ -> let r=Register.fresh() in
+            let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
+            expr varreg e r newl end
       |Ptree.Bdiv -> begin match (e1.expr_node,e2.expr_node) with
           |(Ttree.Econst m, Ttree.Econst n)-> if Int32.div m n == 0l then Egoto truel else Egoto falsel
           |(e, Ttree.Econst 1l) -> condition varreg e truel falsel
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let r2 = Register.fresh() in
-            let newl = generate (Emubranch(Mjnz,r2,truel,falsel)) in
-            let newl2 = generate (Embinop(Msub,r1,r2,newl)) in
-            let i = expr varreg e1 r1 newl2 in
-            let newl3 = generate(i) in
-            expr varreg e2 r2 newl3 end
+          |_ -> let r=Register.fresh() in
+            let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
+            expr varreg e r newl end
       | Ptree.Beq -> begin match (e1.expr_node,e2.expr_node) with
           |(Econst m, Econst n) -> if Int32.compare m n == 0 then Egoto truel else Egoto falsel
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let r2 = Register.fresh() in
-            let newl = generate (Emubranch(Mjz,r2,truel,falsel)) in
-            let newl2 = generate(Embinop(Msub,r1,r2,newl)) in
-            let i = expr varreg e1 r1 newl2 in
-            let newl3 = generate(i) in
-            expr varreg e2 r2 newl3 end
+          |_ -> let r=Register.fresh() in
+            let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
+            expr varreg e r newl end
       | Ptree.Bneq -> begin match (e1.expr_node,e2.expr_node) with
           |(Econst m, Econst n) -> if Int32.compare m n == 0 then Egoto falsel else Egoto truel
-          |(e1,e2) -> let r1 = Register.fresh() in
-            let r2 = Register.fresh() in
-            let newl = generate (Emubranch(Mjz,r2,falsel,truel)) in
-            let newl2 = generate(Embinop(Msub,r1,r2,newl)) in
-            let i = expr varreg e1 r1 newl2 in
-            let newl3 = generate(i) in
-            expr varreg e2 r2 newl3 end
+          |_ -> let r=Register.fresh() in
+            let newl = generate (Emubranch(Mjnz,r,truel,falsel)) in
+            expr varreg e r newl end
       | Ptree.Blt -> begin match (e1.expr_node,e2.expr_node) with
           |(Econst m, Econst n) -> if Int32.compare m n < 0 then Egoto truel else Egoto falsel
           |(e1,e2) -> let r1 = Register.fresh() in
