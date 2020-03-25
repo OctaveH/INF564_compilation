@@ -142,11 +142,12 @@ and ce varreg b n e destr destl =
     let newl = generate(Embinop(Msub,r,destr,destl)) in
     let newl2 = generate(Econst(n,destr,newl)) in
     expr varreg e.expr_node r newl2
-  |Ptree.Bmul -> if Int32.equal n 1l then expr varreg e.expr_node destr destl
+  |Ptree.Bmul -> if Int32.equal n 0l then Econst(0l,destr,destl)
+        else begin if Int32.equal n 1l then expr varreg e.expr_node destr destl
     else let r = Register.fresh() in
       let newl = generate(Embinop(Mmul,r,destr,destl)) in
       let newl2 = generate(Econst(n,r,newl)) in
-      expr varreg e.expr_node destr newl2
+      expr varreg e.expr_node destr newl2 end
   |Ptree.Bdiv -> let r = Register.fresh() in
       let newl = generate(Embinop(Mmul,r,destr,destl)) in
       let newl2 = generate(Econst(n,r,newl)) in
@@ -191,11 +192,12 @@ and ec varreg b e n destr destl =
   |Ptree.Bsub -> if Int32.equal n 0l then expr varreg e.expr_node destr destl
     else let newl = generate(Emunop(Maddi (Int32.neg n),destr,destl)) in
       expr varreg e.expr_node destr newl
-  |Ptree.Bmul -> if Int32.equal n 1l then expr varreg e.expr_node destr destl
+  |Ptree.Bmul -> if Int32.equal n 0l then Econst(0l,destr,destl)
+        else begin if Int32.equal n 1l then expr varreg e.expr_node destr destl
     else let r = Register.fresh() in
       let newl = generate(Embinop(Mmul,r,destr,destl)) in
       let newl2 = generate(Econst(n,r,newl)) in
-      expr varreg e.expr_node destr newl2
+      expr varreg e.expr_node destr newl2 end
   |Ptree.Bdiv -> if Int32.equal n 1l then expr varreg e.expr_node destr destl
         else let r = Register.fresh() in
           let newl = generate(Embinop(Mdiv,r,destr,destl)) in
