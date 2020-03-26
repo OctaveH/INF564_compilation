@@ -70,26 +70,6 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
             let newl = generate(Embinop(Msub,rzero,destr,destl)) in
             let newl2 = generate(Econst(0l,destr,newl)) in
             expr varreg e.expr_node rzero newl2 end end
-
-
-   (*begin match unop with
-      |Ptree.Unot -> begin match e.expr_node with
-          |Ttree.Econst n -> if Int32.equal n 0l then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-          |e -> let ee = expr varreg e destr destl in
-            begin match ee with
-              |Econst(m,_,_)-> if Int32.equal m 0l then Econst(1l,destr,destl) else Econst(0l,destr,destl)
-              |_-> let newl = generate(Emunop(Msetei 0l,destr,destl)) in
-            expr varreg e destr newl end end
-      |Ptree.Uminus ->  begin match e.expr_node with
-          |Econst n -> Econst(Int32.neg n,destr,destl)
-          |e -> let ee = expr varreg e destr destl in
-            begin match ee with
-              |Econst(m,_,_)-> Econst(Int32.neg m,destr,destl)
-              |_-> let rzero = Register.fresh() in
-            let newl = generate(Embinop(Msub,rzero,destr,destl)) in
-            let newl2 = generate(Econst(0l,destr,newl)) in
-                expr varreg e rzero newl2 end end end(*let newl = generate (Emunop(munop unop,destr,destl))in
-                                      expr e.expr_node destr newl*)*)
   | Ebinop (binop,e1,e2) -> begin
     let ee1 = expr varreg e1.expr_node destr destl in (*Les instructions construites ici ne seront pas utilisées*)
     let ee2 = expr varreg e2.expr_node destr destl in
