@@ -266,7 +266,7 @@ let instr (c:coloring) (frame_size:int) = function
     (match lookup c r1, lookup c r2 with
     | Reg re1, Reg re2 -> print_string ("Mmov : " ^ re1 ^ ", " ^ re2);
       Embinop (Mmov, Reg re1, Reg re2, l)) *)
-  | Ertltree.Embinop (Mmov, r1, r2, l) when (lookup c r1) == (lookup c r2) ->
+  | Ertltree.Embinop (Mmov, r1, r2, l) when (lookup c r1) = (lookup c r2) ->
     Egoto l
   | Ertltree.Embinop (Mmul, r1, r2, l) -> begin
       match lookup c r2 with
