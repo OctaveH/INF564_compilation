@@ -65,7 +65,9 @@ let () =
     let p = Ltl.program p_interp in
     if debug then Ltltree.print_file std_formatter p;
     if !interp_ltl then begin ignore (Ltlinterp.program p); exit 0 end;
-    (* ... *)
+    let p = Lin.program p in
+    if debug then X86_64.print_program std_formatter p;
+    X86_64.print_in_file ((Filename.remove_extension !ifile) ^ ".s") p;
   with
   | Lexer.Lexical_error c ->
     localisation (Lexing.lexeme_start_p buf);
