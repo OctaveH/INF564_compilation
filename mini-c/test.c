@@ -4,9 +4,14 @@
 // la commande 'make' recompile mini-c (si nécessaire)
 // et le lance sur ce fichier
 
+/* arbres binaires de recherche */
+
+
+
 
 /*** listes circulaires doublement chaînées ***/
 
 int main() {
-  return 42;
+  putchar(1 / 0);
+  return 0;
 }
