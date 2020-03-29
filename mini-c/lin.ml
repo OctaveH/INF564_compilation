@@ -87,7 +87,7 @@ and instr g l = function
       | Mmul -> emit l (imulq (operand o1) (operand o2))
       | Mdiv -> emit_wl cqto; emit_wl (idivq (operand o1))
 
-      | Msete -> emit l (cmpq (operand o1) (operand o1));
+      | Msete -> emit l (cmpq (operand o1) (operand o2));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (sete (byte_register o2))
       | Msetne -> emit l (cmpq (operand o1) (operand o2));
