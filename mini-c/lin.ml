@@ -85,23 +85,24 @@ and instr g l = function
       | Madd -> emit l (addq (operand o1) (operand o2))
       | Msub -> emit l (subq (operand o1) (operand o2))
       | Mmul -> emit l (imulq (operand o1) (operand o2))
-      | Mdiv -> assert false
+      | Mdiv -> emit_wl cqto; emit_wl (idivq (operand o1))
+
       | Msete -> emit l (cmpq (operand o1) (operand o1));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (sete (byte_register o2))
-      | Msetne -> emit l (cmpq (operand o1) (operand o1));
+      | Msetne -> emit l (cmpq (operand o1) (operand o2));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (setne (byte_register o2))
-      | Msetl -> emit l (cmpq (operand o1) (operand o1));
+      | Msetl -> emit l (cmpq (operand o1) (operand o2));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (setl (byte_register o2))
-      | Msetle -> emit l (cmpq (operand o1) (operand o1));
+      | Msetle -> emit l (cmpq (operand o1) (operand o2));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (setle (byte_register o2))
-      | Msetg -> emit l (cmpq (operand o1) (operand o1));
+      | Msetg -> emit l (cmpq (operand o1) (operand o2));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (setg (byte_register o2))
-      | Msetge -> emit l (cmpq (operand o1) (operand o1));
+      | Msetge -> emit l (cmpq (operand o1) (operand o2));
         emit_wl (movq (imm32 0l) (operand o2));
         emit_wl (setge (byte_register o2))
     end;
