@@ -233,7 +233,7 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
     else
       raise (Error (("Cannot call \"" ^ id.id ^ "\" on these arguments"), id.id_loc))
 
-  | Ptree.Esizeof id -> let s = find_str_in_ctx ctx id in
+  | Ptree.Esizeof id -> let s = find_str_in_ctx ctx id in         (* 2.2.5 *)
     {expr_node=Esizeof s; expr_typ=Tint }
 
 

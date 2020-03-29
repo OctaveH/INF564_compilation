@@ -190,11 +190,7 @@ let lookup (c:coloring) (r:Register.t) =
   if Register.is_hw r then
     Reg r
   else
-    try
-      Register.M.find r c
-    with
-    | Not_found -> Register.print Format.std_formatter r;
-      assert false
+    Register.M.find r c
 
 let instr (c:coloring) (frame_size:int) = function
   | Ertltree.Econst (n, r, l) ->
@@ -305,5 +301,5 @@ let to_ltl_fun (f:Ertltree.deffun) : deffun =
   }
 
 
-let program (ertl_file:Ertltree.file) : file =  
+let program (ertl_file:Ertltree.file) : file =
   {funs = List.map to_ltl_fun ertl_file.funs}
