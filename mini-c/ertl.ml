@@ -41,19 +41,19 @@ let rec args_callee rfic rreel nextl : Label.t = match (rfic,rreel) with
   |(t::qf,r::qr)->let newl=args_callee qf qr nextl in
     generate(Embinop(Mmov,r,t,newl))
 
-    let callee_saved nextl =
-      let rec aux l regl nextl = match l with
-        |[] -> (regl,nextl)
-        |t::q -> let r=Register.fresh() in
-          aux q (r::regl) (generate (Embinop(Mmov,t,r,nextl)))
-      in aux Register.callee_saved [] nextl
+let callee_saved nextl =
+  let rec aux l regl nextl = match l with
+    |[] -> (regl,nextl)
+    |t::q -> let r=Register.fresh() in
+      aux q (r::regl) (generate (Embinop(Mmov,t,r,nextl)))
+  in aux Register.callee_saved [] nextl
 
-    let callee_restaured l nextl =
-      let rec aux l p nextl = match (l,p) with
-        |([],[]) -> nextl
-        |(r::qr,p::qp) -> aux qr qp (generate (Embinop(Mmov,r,p,nextl)))
-        |_ -> assert(false)
-      in aux l (reverse Register.callee_saved) nextl
+let callee_restored l nextl =
+  let rec aux l p nextl = match (l,p) with
+    |([],[]) -> nextl
+    |(r::qr,p::qp) -> aux qr qp (generate (Embinop(Mmov,r,p,nextl)))
+    |_ -> assert(false)
+  in aux l (reverse Register.callee_saved) nextl
 
 let begin_fun formals entryl=
   let newl = args_callee formals Register.parameters entryl in
@@ -63,12 +63,12 @@ let begin_fun formals entryl=
 let end_fun locals exitl result =
   let l_end = generate Ereturn in
   let l_end2 = generate (Edelete_frame l_end) in
-  let l_end3 = callee_restaured locals l_end2 in
+  let l_end3 = callee_restored locals l_end2 in
   graph := Label.M.add exitl (Embinop(Mmov,result,Register.rax,l_end3)) !graph
 
 let end_fun_terminal locals nextl =
   let l_end = generate (Edelete_frame nextl) in
-  callee_restaured locals l_end
+  callee_restored locals l_end
 
 
 (*Optimisation des appels terminaux :
@@ -107,15 +107,6 @@ let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
         let i3 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl2) in
         let newl3 = generate i3 in
         args_caller args Register.parameters id k newl3
-        (* let i = Embinop(Mmov,Register.result,r,l) in
-        let newl = generate i in
-        let i2 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl) in
-        let newl2 = generate i2 in
-        let i3 = Ecall(id,k,newl2) in
-        let newl3 = generate i3 in
-          args_caller args Register.parameters id k newl3*)
-
-
       else let endl = generate Ereturn in
         let i = Ecall (id,k,endl) in
         let newl = generate i in
@@ -172,10 +163,6 @@ let program (l:Rtltree.file) : file =
     (*
 Analyse de durée de vie
 *)
-
-
-
-(*val liveness: Ertltree.cfg -> live_info Label.map*)
 
 let graph_info = ref Label.M.empty
 
@@ -250,16 +237,16 @@ let rec kildall_fill_out succ = match succ with
 let rec kildall () =
   kildall_fill_ws ();
   if Label.S.is_empty !ws then assert(false) else
-  while not (Label.S.is_empty !ws) do
-    let l = Label.S.choose !ws in
-    ws := Label.S.remove l !ws;
-    let t = Label.M.find l !graph_info in
-    let old_ins = t.ins in
-    t.outs <- kildall_fill_out t.succ;
-    t.ins <- Register.S.union t.ins (Register.S.diff t.outs t.defs);
-    if not (Register.S.equal t.ins old_ins) then
-      ws := Label.S.union !ws t.pred
-  done;
+    while not (Label.S.is_empty !ws) do
+      let l = Label.S.choose !ws in
+      ws := Label.S.remove l !ws;
+      let t = Label.M.find l !graph_info in
+      let old_ins = t.ins in
+      t.outs <- kildall_fill_out t.succ;
+      t.ins <- Register.S.union t.ins (Register.S.diff t.outs t.defs);
+      if not (Register.S.equal t.ins old_ins) then
+        ws := Label.S.union !ws t.pred
+    done;
   ()
 
 let liveness cfg =
