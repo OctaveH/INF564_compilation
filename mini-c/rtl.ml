@@ -77,10 +77,10 @@ let rec expr varreg (e : Ttree.expr_node) (destr:register) (destl:label) : instr
       match (ee1,ee2) with
       |(Econst(n1,_,l1),Econst(n2,_,l2))-> if l1==destl then begin
           if l2==destl then begin try Econst (cc binop n1 n2, destr, destl)
-with Division_by_zero -> let r = Register.fresh() in
-  let newl = generate(Embinop(Mdiv,r,destr,destl)) in
-  let newl2 = generate(Econst(n1,destr,newl)) in
-  Econst(n2,r,newl2) end
+            with Division_by_zero -> let r = Register.fresh() in
+              let newl = generate(Embinop(Mdiv,r,destr,destl)) in
+              let newl2 = generate(Econst(n1,destr,newl)) in
+              Econst(n2,r,newl2) end
           else ce varreg binop n1 e2 destr destl end
         else begin
           if l2==destl then ec varreg binop e1 n2 destr destl
@@ -104,6 +104,7 @@ with Division_by_zero -> let r = Register.fresh() in
     (graph := Label.M.add endcall (Ecall(destr, id,reverse reglist,destl)) !graph; i)
   |Ttree.Esizeof s -> Econst (Int32.mul (Int32.of_int 8) s.str_size,destr,destl)
 
+(*Fonctions pour l'optimisation des opérations binaires*)
 and cc b m n = match b with
   |Ptree.Beq -> if Int32.equal m n then 1l else 0l
   |Ptree.Bneq -> if Int32.equal m n then 0l else 1l
@@ -115,10 +116,9 @@ and cc b m n = match b with
   |Ptree.Bsub -> Int32.sub m n
   |Ptree.Bmul -> Int32.mul m n
   |Ptree.Bdiv -> if n=0l then raise Division_by_zero
-                   else Int32.div m n
+    else Int32.div m n
   |Ptree.Band -> if Int32.equal m 0l || Int32.equal n 0l then 0l else 1l
   |Ptree.Bor -> if Int32.equal m 0l && Int32.equal n 0l then 0l else 1l
-
 
 and ce varreg b n e destr destl =
   match b with
@@ -169,8 +169,6 @@ and ce varreg b n e destr destl =
       condition varreg e.expr_node truel falsel
     else Econst(1l,destr,destl)
 
-
-
 and ec varreg b e n destr destl =
   match b with
   |Ptree.Beq -> let newl = generate(Emunop(Msetei n,destr,destl)) in
@@ -216,7 +214,6 @@ and ec varreg b e n destr destl =
   |Ptree.Bor -> let falsel=generate(Econst(0l,destr,destl)) in
     let truel=generate(Econst(1l,destr,destl)) in
     condition varreg (Ttree.Ebinop (Ptree.Bor, e, {expr_node=Econst(n);expr_typ=Tint})) truel falsel
-
 
 and ee varreg b e1 e2 destr destl =
   match b with
@@ -379,7 +376,6 @@ let reg_alloc_for_var varreg (l: Ttree.decl_var list): register list =
     |t::q -> let r = Register.fresh() in (Hashtbl.add varreg (snd t) r; aux_reg_alloc (r::m) q)
   in aux_reg_alloc [] l
 
-
 (*Traduit les stmt en instruction*)
 let rec stmt varreg (s : Ttree.stmt) (destl:label) (retr:register) (exitl:label) : instr = match s with
   | Sskip -> Egoto destl
@@ -419,7 +415,6 @@ let body_to_cfg varreg entryl exitl result (b:Ttree.stmt list) =
       aux exitl newl result q
   in aux exitl exitl result (reverse b)
 
-
 let declfun_to_deffun (f:Ttree.decl_fun) : deffun =
   let entryl = Label.fresh() in
   let exitl = Label.fresh() in
@@ -434,12 +429,10 @@ let declfun_to_deffun (f:Ttree.decl_fun) : deffun =
    fun_formals = reverse args;
    fun_result  = result;
    fun_locals  = Register.set_of_list varloc;
-   (* toutes les variables locales de la fonction maintenant regroupées ici *)
    fun_entry   = entryl;
    fun_exit    = exitl;
    fun_body    = !graph;}
 
-(*D'un Ttree.file à une liste de fonction*)
 let program (l:Ttree.file) : file =
   let rec aux_tree_to_rtl m l = match l with
     |[]-> m
