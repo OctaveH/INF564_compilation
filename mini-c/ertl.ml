@@ -17,15 +17,18 @@ let generate i =
   let l = Label.fresh () in
   graph := Label.M.add l i !graph;
   l
+
 (*Avant ecall*)
 let rec push_pile l nextl : instr = match l with
   |[] -> Egoto nextl
   |t::[] -> Epush_param(t,nextl) (*attention c'est un Estore*)
   |t::q -> let newl = generate (Epush_param(t,nextl)) in push_pile q newl
+
 (*Début de fonction*)
 let rec pull_pile l nextl n : Label.t = match l with
   |[] -> nextl
-  |t::q -> let newl = generate (Eget_param(n,t,nextl)) in pull_pile q newl (n+8) (*attention c'est un Eload*)
+  |t::q -> let newl = generate (Eget_param(n,t,nextl)) in pull_pile q newl (n+8)
+
 (*On met les args dans les registres réels avant Ecall*)
 let rec args_caller rfic rreel id k nextl : instr = match (rfic,rreel) with
   |([],_)-> Egoto nextl
@@ -34,6 +37,7 @@ let rec args_caller rfic rreel id k nextl : instr = match (rfic,rreel) with
   |(t::qf,r::qr)->let i = Embinop(Mmov,t,r,nextl) in
     let newl= generate i in
     args_caller qf qr id k newl
+
 (*Début de fonction, on met les args dans leur pseudoregistre*)
 let rec args_callee rfic rreel nextl : Label.t = match (rfic,rreel) with
   |([],_)-> nextl
@@ -70,19 +74,6 @@ let end_fun_terminal locals nextl =
   let l_end = generate (Edelete_frame nextl) in
   callee_restored locals l_end
 
-
-(*Optimisation des appels terminaux :
-  Côté appelé ->
-  Enlève le Ealloc_frame
-  Je peux changer la fin de l'appeleur et le début de l'appelé, mais pas la fin de l'appelé, donc je dois garder la partie callee_saved
-  Côté appeleur ->
-  Enlève le Edelete_frame, le Ereturn,
-  le result de rax dans r puis de r dans rax
-*)
-
-
-
-
 let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
   | Rtltree.Econst (r, n, l) -> Econst(r, n, l)
   | Rtltree.Eload (r1,n,r2,l) -> Eload (r1,n,r2,l)
@@ -101,7 +92,7 @@ let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
     if l = exitl then (*Optimisation des appels terminaux*)
       if (k>6) then
         let endl = generate Ereturn in
-        let i = Ecall (id,6,endl) in  (*J'ai remplacé k par 6, le nombre de registres utilisés*)
+        let i = Ecall (id,6,endl) in
         let newl = generate i in
         let newl2 = end_fun_terminal locals newl in
         let i3 = Emunop(Maddi (Int32.of_int (8*(6-k))),Register.rsp,newl2) in
@@ -126,23 +117,16 @@ let to_instr (i:Rtltree.instr) locals exitl: instr = match i with
         args_caller args Register.parameters id k newl2
 
 let  tocfg cfg locals exitl =
-  (*graph := Label.M.empty;*)
   let aux l i =
     let newi = to_instr i locals exitl in
     graph := Label.M.add l newi !graph in
   Label.M.iter aux cfg
 
-
-
-
-
 let tofun (f:Rtltree.deffun) : deffun =
-
   let k = length f.fun_formals in
   let (locals,entryl) = begin_fun f.fun_formals f.fun_entry in
   tocfg f.fun_body locals f.fun_exit;
   end_fun locals f.fun_exit f.fun_result ;
-
   {
     fun_name = f.fun_name;
     fun_formals = k; (* nb total d'arguments *)
@@ -150,7 +134,6 @@ let tofun (f:Rtltree.deffun) : deffun =
     fun_entry = entryl;
     fun_body = !graph;
   }
-
 
 let program (l:Rtltree.file) : file =
   let rec aux l = match l with
@@ -174,7 +157,6 @@ let some_param n =
     |(l,0) -> []
     |(t::q,k)-> t::(aux q (k-1))
   in aux Register.parameters n
-
 
 let find_succ i = match i with
   | Econst (n,r,l) -> [l]
@@ -218,7 +200,6 @@ let rec add_to_pred l predl = match l with
     (info.pred <- Label.S.add predl info.pred;
      add_to_pred q predl)
 
-
 let complete_live_info ()=
   let aux label info =
     add_to_pred info.succ label;
@@ -232,7 +213,6 @@ let rec kildall_fill_out succ = match succ with
   |[] -> Register.S.empty
   |l::q -> let t = Label.M.find l !graph_info in
     Register.S.union (t.ins) (kildall_fill_out q)
-
 
 let rec kildall () =
   kildall_fill_ws ();
@@ -259,7 +239,6 @@ let liveness cfg =
 let rec liveness_file p = match p with
   |[]->[]
   |t::q->(liveness t.fun_body)::(liveness_file q)
-
 
 let program2 (l:Rtltree.file) =
   let rec aux l = match l with
