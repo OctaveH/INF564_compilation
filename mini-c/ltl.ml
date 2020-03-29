@@ -93,24 +93,6 @@ let color (inter_graph:igraph) : coloring * int =
   let diff_allocatable = fun node -> Register.S.diff Register.allocatable node.intfs in
   let possible_colors = ref (Register.M.map diff_allocatable inter_graph) in
   possible_colors := Register.M.filter (fun reg _ -> Register.S.mem reg !todo) !possible_colors;
-  (* DEBUG *)
-  (* todo := Register.S.remove "r3" !todo;
-  chosen_color := Register.M.add "r3" "a" !chosen_color;
-  let a = Register.S.singleton "a" in
-  let b = Register.S.singleton "b" in
-  let ab = Register.S.union a b in
-  possible_colors := Register.M.empty;
-  possible_colors := Register.M.add "r1" ab !possible_colors;
-  possible_colors := Register.M.add "r2" ab !possible_colors;
-  possible_colors := Register.M.add "r4" a !possible_colors;
-  possible_colors := Register.M.add "r5" b !possible_colors;
-  let print_rm rm =
-    let print_col_set cs =
-      Register.S.iter (fun c -> print_string c) cs
-    in
-    Register.M.iter (fun r cols -> print_string (r ^ " : ");print_col_set cols; print_newline()) rm
-  in *)
-  (* DEBUG *)
 
   let register_to_color () : (Register.t * color) option =
     let check_ge_one_color reg colors =
@@ -139,17 +121,6 @@ let color (inter_graph:igraph) : coloring * int =
       Register.M.filter check_has_pref_color exactly_one_color in
     let at_least_one_color_pref =
       Register.M.filter check_has_pref_color at_least_one_color in
-
-    (* DEBUG *)
-    (* print_rm exactly_one_color_pref;
-    print_newline ();
-    print_rm exactly_one_color;
-    print_newline ();
-    print_rm at_least_one_color_pref;
-    print_newline ();
-    print_rm at_least_one_color;
-    print_newline (); *)
-    (* DEBUG *)
 
     if not(Register.M.is_empty exactly_one_color_pref) then
       let reg, colors = Register.M.choose exactly_one_color_pref in
@@ -189,7 +160,7 @@ let color (inter_graph:igraph) : coloring * int =
           set_col
       in
       possible_colors := Register.M.mapi remove_color !possible_colors
-    | None -> let reg = Register.S.choose !todo in
+    | _ -> let reg = Register.S.choose !todo in
       todo := Register.S.remove reg !todo;
       possible_colors := Register.M.filter (fun reg _ -> Register.S.mem reg !todo) !possible_colors;
   done;
@@ -202,8 +173,6 @@ let color (inter_graph:igraph) : coloring * int =
       colormap := Register.M.add reg (Spilled (-8 * !stack_counter)) !colormap
   in
   Register.S.iter set_color todo_init;
-
-  (* Register.S.iter (Register.print Format.std_formatter) todo_init; *)
 
   !colormap, !stack_counter
 
@@ -262,10 +231,6 @@ let instr (c:coloring) (frame_size:int) = function
   end
   | Ertltree.Emunop (op, r, l) ->
     Emunop (op, lookup c r, l)
-  (* | Ertltree.Embinop (Mmov, r1, r2, l) ->
-    (match lookup c r1, lookup c r2 with
-    | Reg re1, Reg re2 -> print_string ("Mmov : " ^ re1 ^ ", " ^ re2);
-      Embinop (Mmov, Reg re1, Reg re2, l)) *)
   | Ertltree.Embinop (Mmov, r1, r2, l) when (lookup c r1) = (lookup c r2) ->
     Egoto l
   | Ertltree.Embinop (Mmul, r1, r2, l) -> begin
@@ -326,13 +291,6 @@ let to_ltl_fun (f:Ertltree.deffun) : deffun =
   in
   Register.S.iter add_missing_reg f.fun_locals;
 
-  (* print_string "graph nodes :\n";
-  Register.M.iter (fun r _ -> Register.print Format.std_formatter r) !inter_graph;
-  print_newline ();
-  print_string "fun_locals :\n";
-  Register.S.iter (fun r -> Register.print Format.std_formatter r) f.fun_locals;
-  print_newline (); *)
-
   let colors, m = color !inter_graph in
   cur_cfg := Label.M.empty;
   let add_instr l inst =
@@ -347,42 +305,5 @@ let to_ltl_fun (f:Ertltree.deffun) : deffun =
   }
 
 
-let program (ertl_file:Ertltree.file) : file =
-  (* let ig1 = add_in_prefs (add_in_prefs (add_in_prefs Register.M.empty "r1" "r2") "r1" "r3") "r1" "r2" in
-  (* print_ig ig1;
-  print_newline (); *)
-  let ig2 = add_in_intfs (add_in_intfs (add_in_intfs ig1 "r4" "r5") "r1" "r5") "r1" "r2" in
-  (* print_ig ig2;
-  print_newline (); *)
-  let ig3 = add_in_intfs (add_in_intfs (add_in_prefs ig2 "r3" "r4") "r3" "r5") "r3" "r2" in
-  print_ig ig3;
-  print_newline ();
-  let _ = color ig3 in *)
-
-
-
-  (* Register.print_set Register.allocatable; *)
-  (* print_string "avant";
-  let _::first_function::_ = ertl_file.funs in
-  let lis = Ertl.liveness first_function.fun_body in
-  Ertltree.print_deffun Format.std_formatter (first_function, lis);
-  print_string "après ";
-  let print_li lab li =
-    print_string (lab ^ " : ");
-    (* Ertl.print_live_info Format.std_formatter li; *)
-    print_newline ()
-  in
-
-  (* Ertl.print_live_info Format.std_formatter li; *)
-  (* Label.M.iter print_li lis; *)
-  print_newline ();
-  let inter_graph = make lis in
-  print_ig inter_graph;
-
-  print_newline ();
-
-  let c, n = color inter_graph in
-  print_cm c; *)
-
-
+let program (ertl_file:Ertltree.file) : file =  
   {funs = List.map to_ltl_fun ertl_file.funs}

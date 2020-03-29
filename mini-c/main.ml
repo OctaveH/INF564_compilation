@@ -77,7 +77,8 @@ let () =
     localisation (Lexing.lexeme_start_p buf);
     eprintf "syntax error@.";
     exit 1
-  | Typing.Error s->
+  | Typing.Error (s, loc) ->
+    Typing.localisation loc !ifile;
     eprintf "typing error: %s@." s;
     exit 1
   | e ->

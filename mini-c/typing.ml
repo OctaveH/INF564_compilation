@@ -1,16 +1,16 @@
 open Ttree
 
 (* utiliser cette exception pour signaler une erreur de typage *)
-exception Error of string
+exception Error of string * Ptree.loc
 
-let loc_to_string (loc:Ptree.loc) =
+let localisation (loc:Ptree.loc) (file:string) : unit =
   let pos1, pos2 = loc in
-  let file = pos1.pos_fname in
-  let l1 = string_of_int pos1.pos_lnum in
-  let l2 = string_of_int pos2.pos_lnum in
-  let c1 = string_of_int pos1.pos_cnum in
-  let c2 = string_of_int pos2.pos_cnum in
-  "file " ^ file ^ " (l" ^ l1 ^ "c" ^ c1 ^ " to l" ^ l2 ^ "c" ^ c2 ^ ")"
+  (* let file = pos1.pos_fname in *)
+  let l1 = pos1.pos_lnum in
+  let c1 = pos1.pos_cnum - pos1.pos_bol in
+  let c2 = pos2.pos_cnum - pos1.pos_bol in
+  Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file l1 c1 c2
+  (* "File \"" ^ file ^ "\", line " ^ l1 ^ ", characters " ^ c1 ^ "-" ^ c2 *)
 
 
 type env = {
@@ -25,7 +25,7 @@ and fun_profil = {
 
 let string_of_typ = function
   | Tint -> "int"
-  | Tstructp s -> "struct " ^ s.str_name ^ " *"
+  | Tstructp s -> "struct " ^ s.str_name ^ "*"
   | Tvoidstar -> "void*"
   | Ttypenull -> "typenull"
 
@@ -80,21 +80,21 @@ let find_var_in_ctx (ctx:env) (id:Ptree.ident) : typ =
     Hashtbl.find ctx.vars id.id
   with
   | Not_found ->
-    raise (Error ("Variable \"" ^ id.id ^ "\" not declared (" ^ loc_to_string id.id_loc ^ ")"))
+    raise (Error (("Variable \"" ^ id.id ^ "\" not declared"), id.id_loc))
 
 let find_str_in_ctx (ctx:env) (id:Ptree.ident) : structure =
   try
     Hashtbl.find ctx.strs id.id
   with
   | Not_found ->
-    raise (Error ("Structure \"" ^ id.id ^ "\" not declared (" ^ loc_to_string id.id_loc ^ ")"))
+    raise (Error (("Structure \"" ^ id.id ^ "\" not declared"), id.id_loc))
 
 let find_str_field (ctx:env) (str:structure) (id:Ptree.ident) : field =
   try
     Hashtbl.find str.str_fields id.id
   with
   | Not_found -> (*let () = print_string (string_of_env ctx) in*)
-    raise (Error ("Structure \"" ^ str.str_name ^ "\" does not have field \"" ^ id.id ^ "\" (" ^ loc_to_string id.id_loc ^ ")"))
+    raise (Error (("Structure \"" ^ str.str_name ^ "\" does not have field \"" ^ id.id ^ "\""), id.id_loc))
 
 
 let find_fun_in_ctx (ctx:env) (id:Ptree.ident) : fun_profil =
@@ -102,7 +102,7 @@ let find_fun_in_ctx (ctx:env) (id:Ptree.ident) : fun_profil =
     Hashtbl.find ctx.funs id.id
   with
   | Not_found ->
-    raise (Error ("Function \"" ^ id.id ^ "\" not declared (" ^ loc_to_string id.id_loc ^ ")"))
+    raise (Error (("Function \"" ^ id.id ^ "\" not declared"), id.id_loc))
 
 let env_to_string (e:env) : string =
   let f_rec_vars (id:string) (t:typ) (s_old:string) : string =
@@ -157,7 +157,7 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
       | Tstructp s ->
         let fld = find_str_field ctx s id in
         {expr_node=Eaccess_field (str, fld); expr_typ=fld.field_typ}
-      | _ -> raise (Error ("Not a structure at " ^ (loc_to_string e.expr_loc)))
+      | _ -> raise (Error ("Not a structure", e.expr_loc))
     end
 
   | Ptree.Eassign ((Lident id), e) ->                             (* 2.2.6 *)
@@ -166,7 +166,7 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
     if eq ty1 e2.expr_typ  then
       {expr_node=Eassign_local (id.id, e2); expr_typ=ty1}
     else
-      raise (Error ("Not the right type ! (" ^ (loc_to_string e.expr_loc) ^ ")"))
+      raise (Error ("Not the right type", e.expr_loc))
 
   | Ptree.Eassign ((Larrow (e1, id)), e2) ->                      (* 2.2.6 *)
     let str = type_expr ctx e1 in
@@ -174,21 +174,21 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
     begin
       match str.expr_typ with
       | Tstructp s -> find_str_field ctx s id
-      | _ -> raise (Error ("Not a structure at " ^ (loc_to_string e.expr_loc)))
+      | _ -> raise (Error ("Not a structure", e.expr_loc))
     end
     in
     let te2 = type_expr ctx e2 in
     if eq fld.field_typ te2.expr_typ then
       {expr_node=Eassign_field (str, fld, te2); expr_typ=fld.field_typ}
     else
-      raise (Error ("Not the right type ! (" ^ (loc_to_string e2.expr_loc) ^ ")"))
+      raise (Error ("Not the right type", e2.expr_loc))
 
   | Ptree.Eunop (Uminus, e) ->                                    (* 2.2.7 *)
     let te = type_expr ctx e in
     if eq te.expr_typ Tint then
       {expr_node=Eunop(Uminus, te); expr_typ=Tint}
     else
-      raise (Error ("Not an int at " ^ (loc_to_string e.expr_loc)))
+      raise (Error ("Not an int", e.expr_loc))
 
   | Ptree.Eunop (Unot, e) -> let te = type_expr ctx e in          (* 2.2.8 *)
     {expr_node=Eunop(Unot, te); expr_typ=Tint}
@@ -201,8 +201,11 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
         if eq te1.expr_typ te2.expr_typ then
           {expr_node=Ebinop(bo, te1, te2); expr_typ=Tint}
         else
-          raise (Error ("Not the same types (" ^ (loc_to_string e1.expr_loc) ^
-                        ") and (" ^ (loc_to_string e2.expr_loc) ^ ")" ))
+          raise (Error (("This expressions has type " ^ (string_of_type te2.expr_typ) ^
+                         " but is expected to have type " ^ (string_of_type te1.expr_typ)),
+                       e2.expr_loc))
+          (* raise (Error ("Not the same types (" ^ (loc_to_string e1.expr_loc) ^
+                        ") and (" ^ (loc_to_string e2.expr_loc) ^ ")" )) *)
 
       | (Band|Bor) ->                                             (* 2.2.10 *)
         {expr_node=Ebinop (bo, type_expr ctx e1, type_expr ctx e2); expr_typ=Tint}
@@ -212,9 +215,14 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
         let te2 = type_expr ctx e2 in
         if eq te1.expr_typ Tint && eq te2.expr_typ Tint then
           {expr_node=Ebinop(bo, te1, te2); expr_typ=Tint}
+        else if eq te1.expr_typ Tint then
+          raise (Error (("This expressions has type " ^ (string_of_type te2.expr_typ) ^
+                         " but is expected to have type int"),
+                        e2.expr_loc))
         else
-          raise (Error ("Not an int type (" ^ (loc_to_string e1.expr_loc) ^
-                        ") or (" ^ (loc_to_string e2.expr_loc) ^ ")" ))
+          raise (Error (("This expressions has type " ^ (string_of_type te1.expr_typ) ^
+                         " but is expected to have type int"),
+                        e2.expr_loc))
     end
 
   | Ptree.Ecall (id, le) -> let fp = find_fun_in_ctx ctx id in    (* 2.2.12 *)
@@ -223,8 +231,7 @@ let rec type_expr (ctx:env) (e:Ptree.expr) : expr = match e.expr_node with
     if same_types typ_list fp.arg_ty then
       {expr_node=Ecall (id.id, tle); expr_typ=fp.fun_ty}
     else
-      raise (Error ("Cannot call \"" ^ id.id ^ "\" on these arguments (" ^
-                    (loc_to_string id.id_loc) ^ ")"))
+      raise (Error (("Cannot call \"" ^ id.id ^ "\" on these arguments"), id.id_loc))
 
   | Ptree.Esizeof id -> let s = find_str_in_ctx ctx id in
     {expr_node=Esizeof s; expr_typ=Tint }
@@ -240,7 +247,7 @@ let rec add_decls_var_cxt (ctx:env) (l_decl:Ptree.decl_var list)
   | [] -> []
   | (ty, id)::q -> begin
       if Hashtbl.mem set_string id.id then
-        raise (Error ("Variable \"" ^ id.id ^ "\" already exists in this block (" ^ (loc_to_string id.id_loc) ^ ")"))
+        raise (Error (("Variable \"" ^ id.id ^ "\" already exists in this block"), id.id_loc))
       else (
         let tty = type_typ ctx ty in
         let tdv = tty, id.id in
@@ -267,7 +274,10 @@ let rec type_instr (ctx:env) (ty0:typ) (s:Ptree.stmt) : stmt =
     let expr = type_expr ctx e in
     if eq expr.expr_typ ty0
     then Sreturn expr (* 2.3.3 *)
-    else assert false
+    else
+      raise (Error (("This expressions has type " ^ (string_of_type expr.expr_typ) ^
+                     " but is expected to have type " ^ (string_of_type ty0)),
+                    e.expr_loc))
 
 (* 2.3.6 TODO : fill decl_var list*)
 and type_block (ctx:env) (ty0:typ) (b:Ptree.block) : block = match b with
@@ -289,9 +299,8 @@ let type_fun (ctx:env) (f:Ptree.decl_fun) : decl_fun =
     | [] -> []
     | (ty, id)::q ->
       if Hashtbl.mem set_string id.id then
-        raise (Error ("Function \"" ^ f.fun_name.id ^
-                      "\" already take an argument named \"" ^ id.id ^
-                      "\" (" ^ (loc_to_string id.id_loc) ^ ")"))
+        raise (Error (("Function \"" ^ f.fun_name.id ^
+                      "\" already take an argument named \"" ^ id.id ^ "\""), id.id_loc))
       else
         (* print_string (id.id ^ ", "); *)
         Hashtbl.add set_string id.id ();
@@ -324,7 +333,7 @@ let add_struc_ctx (ctx:env) (ds:Ptree.decl_struct) : unit =
     | [] -> ()
     | (ty, vid)::q -> begin
         if Hashtbl.mem fields vid.id then
-          raise (Error ("Field \"" ^ id.id ^ "\" already exists in this structure (" ^ (loc_to_string id.id_loc) ^ ")"))
+          raise (Error (("Field \"" ^ id.id ^ "\" already exists in this structure"), id.id_loc))
         else
           let tty = (type_typ ctx ty) in
           let fld = {field_name=vid.id; field_typ=tty; field_pos=pos} in
@@ -341,13 +350,13 @@ let rec type_file (ctx:env) (fl:Ptree.file) : file =
   | [] -> []
   | (Ptree.Dstruct (id, dvl))::q ->
     if Hashtbl.mem ctx.strs id.id then
-      raise (Error ("Structure \"" ^ id.id ^ "\" already exists (" ^ (loc_to_string id.id_loc) ^ ")"))
+      raise (Error (("Structure \"" ^ id.id ^ "\" already exists"), id.id_loc))
     else
       add_struc_ctx ctx (id, dvl);
       type_file ctx q
   | (Ptree.Dfun df)::q ->
     if Hashtbl.mem ctx.funs df.fun_name.id then
-      raise (Error ("Function \"" ^ df.fun_name.id ^ "\" already exists (" ^ (loc_to_string df.fun_name.id_loc) ^ ")"))
+      raise (Error (("Function \"" ^ df.fun_name.id ^ "\" already exists"), df.fun_name.id_loc))
     else
       let tdf = type_fun ctx df in
       tdf::(type_file ctx q)

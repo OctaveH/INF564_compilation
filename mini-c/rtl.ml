@@ -23,7 +23,7 @@ let match_id varreg id = try
     Hashtbl.find varreg id
   with
   | Not_found ->
-    raise (Typing.Error ("Variable \"" ^ id ^ "\" not declared"))
+    raise (Failure ("Variable \"" ^ id ^ "\" not declared"))
 
 exception Division_by_zero
 

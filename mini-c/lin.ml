@@ -9,11 +9,6 @@ let emit_wl i = code := Code i :: !code
 let labels = Hashtbl.create 17
 let need_label l = Hashtbl.add labels l ()
 
-(* let asm_unop (op:munop) (o:Ltltree.operand) =
-  match op with
-  | Maddi n -> addq (imm32 n)
-  | Msetei n -> *)
-
 let operand (o:Ltltree.operand) : [`Q] operand =
   match o with
   | Reg r -> reg (register64 r)
@@ -191,7 +186,6 @@ let program (p:Ltltree.file) : program =
   let data = nop in
   let add_fun () (f:Ltltree.deffun) = text := (fun_to_asm f) ++ !text in
   List.fold_left (add_fun) () p.funs;
-
   {
     text = !text;
     data = data;
